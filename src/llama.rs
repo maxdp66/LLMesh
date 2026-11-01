@@ -196,8 +196,15 @@ fn find_bin(dir: &Path, name: &str) -> Option<PathBuf> {
     None
 }
 
+/// Names the RPC server binary has had across llama.cpp releases (`ggml-rpc-server` since late 2026).
+const RPC_SERVER_NAMES: [&str; 2] = ["ggml-rpc-server", "rpc-server"];
+
+fn find_rpc_server(dir: &Path) -> Option<PathBuf> {
+    RPC_SERVER_NAMES.iter().find_map(|n| find_bin(dir, n))
+}
+
 fn find_install(dir: &Path) -> Option<(PathBuf, PathBuf)> {
-    let rpc = find_bin(dir, "rpc-server")?;
+    let rpc = find_rpc_server(dir)?;
     let srv = find_bin(dir, "llama-server")?;
     Some((rpc, srv))
 }
@@ -232,15 +239,26 @@ async fn run_capture(mut c: Command, timeout: Duration) -> Result<String> {
     Ok(text)
 }
 
-/// `llama-server --version` prints `version: 12017 (abcdef)`; that's release tag `b12017`.
+/// The release tag from `llama-server --version`, which prints either
+/// `version: 12017 (abcdef)` (older) or `version: 0.8.0-dev (build 12017, commit abcdef)`.
+pub fn parse_version_tag(out: &str) -> Option<String> {
+    let line = out.lines().find(|l| l.trim_start().starts_with("version:"))?;
+    let rest = line.split_once(':')?.1;
+    if let Some((_, after)) = rest.split_once("build ") {
+        let n: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(n) = n.parse::<u64>() {
+            return Some(format!("b{n}"));
+        }
+    }
+    rest.split_whitespace().next()?.parse::<u64>().ok().map(|n| format!("b{n}"))
+}
+
 async fn detect_tag(bin_dir: &Path, server: &Path) -> Option<String> {
     let mut c = Command::new(server);
     c.arg("--version");
     set_lib_env(&mut c, bin_dir);
     let out = run_capture(c, Duration::from_secs(20)).await.ok()?;
-    let line = out.lines().find(|l| l.trim_start().starts_with("version:"))?;
-    let n = line.split(':').nth(1)?.split_whitespace().next()?;
-    n.parse::<u64>().ok().map(|n| format!("b{n}"))
+    parse_version_tag(&out)
 }
 
 async fn probe(bin_dir: &Path, server: &Path, backend: Backend) -> Result<Vec<GpuDevice>> {
@@ -367,7 +385,7 @@ pub async fn setup(paths: &crate::config::Paths, opts: &LlamaOpts) -> Result<Ins
     }
 
     // A system install (e.g. Homebrew) of the pinned version is used as-is.
-    let system = match (on_path("rpc-server"), on_path("llama-server")) {
+    let system = match (RPC_SERVER_NAMES.iter().find_map(|n| on_path(n)), on_path("llama-server")) {
         (Some(r), Some(s)) => Some((r, s)),
         _ => None,
     };
@@ -769,6 +787,13 @@ mod tests {
         assert_eq!(assets(t, "windows", "x86_64", Backend::Cuda).unwrap()[1], "cudart-llama-bin-win-cuda-12.4-x64.zip");
         assert_eq!(assets(t, "windows", "aarch64", Backend::Cpu).unwrap(), vec!["llama-b12017-bin-win-cpu-arm64.zip"]);
         assert!(assets(t, "macos", "aarch64", Backend::Cuda).is_none());
+    }
+
+    #[test]
+    fn version_tags() {
+        assert_eq!(parse_version_tag("version: 0.8.0-dev (build 12017, commit 5047748f1)\nbuilt with GNU 11.4.0").as_deref(), Some("b12017"));
+        assert_eq!(parse_version_tag("version: 6000 (abc1234)\n").as_deref(), Some("b6000"));
+        assert_eq!(parse_version_tag("nothing useful"), None);
     }
 
     #[test]

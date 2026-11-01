@@ -77,7 +77,7 @@ for chunk in client.chat.completions.create(
 4. llama.cpp's automatic fitting (`-fit`, on by default) places layers across all those devices according to their free memory. If loading fails, llmesh retries with a smaller context.
 5. When someone joins or leaves, the head restarts `llama-server` with the new split. If the head disappears, the next-oldest node takes over, typically within 15 to 20 seconds.
 
-All nodes use the same pinned llama.cpp release (currently `b12017`; override it with `LLMESH_LLAMA_TAG`) because the RPC protocol changes between versions. A node on a different release is left out of the split and flagged in the dashboard.
+All nodes use the same pinned llama.cpp release (currently `b12017`; override it with `LLMESH_LLAMA_TAG`) because the RPC protocol changes between versions. A node on a different release is left out of the split and flagged in the dashboard. Recent releases ship the RPC server binary as `ggml-rpc-server` (older ones as `rpc-server`); llmesh accepts either name, also under `--llama-dir`.
 
 ## Performance: what to expect
 

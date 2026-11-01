@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 args = sys.argv[1:]
 if "--version" in args:
-    print("version: 12017 (fake)\nbuilt with fake for testing"); sys.exit(0)
+    print("version: 0.8.0-dev (build 12017, commit fake)\nbuilt with fake for testing"); sys.exit(0)
 if "--list-devices" in args:
     print("Available devices:\n  (none)"); sys.exit(0)
 
