@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (warnings are errors)
+        run: cargo build --locked
+        env:
+          RUSTFLAGS: -D warnings
+      - name: Unit tests
+        run: cargo test --locked
+        env:
+          RUSTFLAGS: -D warnings
+
+  e2e:
+    name: end-to-end (3 nodes, fake llama.cpp)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install openai
+      - run: cargo build --locked
+      - run: python3 tests/e2e/run_e2e.py

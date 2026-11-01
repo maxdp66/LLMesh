@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llmesh</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5f6b7a; --border: #dde2e8;
+  --accent: #2f6fde; --accent-text: #ffffff; --ok: #1e8a4c; --warn: #b26a00; --bad: #c8322f;
+  --chip: #eef1f5; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418; --panel: #1a1e24; --text: #e6e9ee; --muted: #9aa5b3; --border: #2c323b;
+    --accent: #5b8ff0; --accent-text: #0b0d10; --ok: #45c47c; --warn: #e3a33b; --bad: #f06a66; --chip: #242a32;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
+header h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+header .sub { color: var(--muted); }
+main { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; padding: 16px 20px 40px; max-width: 1500px; margin: 0 auto; }
+section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+section.wide { grid-column: 1 / -1; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 10px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.tablewrap { overflow-x: auto; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--chip); font-size: 12px; white-space: nowrap; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+button { font: inherit; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--chip); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+input, select, textarea { font: inherit; padding: 6px 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+input[type=text], textarea { width: 100%; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > .grow { flex: 1; min-width: 160px; }
+pre.logs { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 8px; max-height: 260px; overflow: auto; font: 12px/1.4 var(--mono); white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; }
+.invite { font: 12px/1.4 var(--mono); word-break: break-all; background: var(--bg); border: 1px dashed var(--border); border-radius: 7px; padding: 8px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; }
+.kv div:nth-child(odd) { color: var(--muted); }
+.bar { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 6px; }
+.bar > div { height: 100%; background: var(--accent); }
+#chatlog { height: 280px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 8px; margin-bottom: 8px; }
+.msg { margin: 0 0 8px; white-space: pre-wrap; }
+.msg b { color: var(--muted); font-weight: 600; }
+.results { max-height: 300px; overflow: auto; margin-top: 8px; }
+.results div.item { padding: 6px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.results div.item:hover { background: var(--chip); }
+.toast { position: fixed; bottom: 16px; right: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; box-shadow: 0 4px 18px rgba(0,0,0,.15); display: none; max-width: 420px; }
+@media (max-width: 520px) { main { grid-template-columns: 1fr; padding: 12px 16px; } section { padding: 12px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>llmesh</h1>
+  <span class="sub" id="hdr-group">connecting…</span>
+  <span class="chip" id="hdr-role"></span>
+  <span class="sub" id="hdr-model"></span>
+</header>
+<main>
+  <section>
+    <h2>This node</h2>
+    <div class="kv" id="me"></div>
+    <div id="invite-box" style="margin-top:12px; display:none">
+      <div class="row" style="justify-content:space-between"><span class="muted">Invite code</span><button id="copy-invite">Copy</button></div>
+      <div class="invite" id="invite"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Model</h2>
+    <div class="kv" id="head"></div>
+    <div class="bar" id="dlbar" style="display:none"><div></div></div>
+    <details style="margin-top:8px"><summary class="muted">Head logs</summary><pre class="logs" id="logs"></pre></details>
+  </section>
+
+  <section class="wide">
+    <h2>Members</h2>
+    <div class="tablewrap"><table id="members">
+      <thead><tr><th>Name</th><th>Role</th><th>Connection</th><th>RTT</th><th>RAM free / total</th><th>GPU</th><th>llama.cpp</th><th>OS</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="muted" id="capacity" style="margin-top:8px"></div>
+  </section>
+
+  <section>
+    <h2>Choose a model (Hugging Face)</h2>
+    <div class="row">
+      <input type="text" class="grow" id="hf-q" placeholder="Search GGUF models, e.g. qwen3 8b">
+      <button id="hf-go">Search</button>
+    </div>
+    <div class="results" id="hf-results"></div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" class="grow" id="manual-ref" placeholder="or type owner/repo:QUANT, a URL or a path">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" id="set-model">Set as group model</button>
+      <button id="vote-manual">Vote for it</button>
+    </div>
+    <div class="muted" id="pick-note" style="margin-top:6px"></div>
+  </section>
+
+  <section>
+    <h2>Voting</h2>
+    <div class="row" id="mode-row">
+      <span class="muted">Who decides:</span>
+      <select id="mode"><option value="admin">Admin decides</option><option value="vote">Vote decides</option></select>
+      <button id="new-round">Start new round</button>
+    </div>
+    <div style="margin-top:10px" id="round"></div>
+    <table id="tally" style="margin-top:6px"><thead><tr><th>Model</th><th>Votes</th><th></th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section class="wide">
+    <h2>Chat</h2>
+    <div id="chatlog"></div>
+    <div class="row">
+      <input type="text" class="grow" id="chat-in" placeholder="Say something to the group's model…">
+      <button class="primary" id="chat-send">Send</button>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let S = null;
+let selectedRef = "";
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function hb(b) { if (!b) return "0 B"; const u = ["B","KB","MB","GB","TB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return b.toFixed(i ? 1 : 0) + " " + u[i]; }
+function short(id) { return id ? String(id).slice(0, 10) : ""; }
+function toast(msg, bad) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; t.style.borderColor = bad ? "var(--bad)" : "var(--border)"; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", 4500); }
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-Llmesh": "1" }, body: JSON.stringify(body) };
+  const r = await fetch("/mesh/api/" + path, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+  return j;
+}
+
+function stateText(hs) {
+  if (!hs) return "";
+  switch (hs.state) {
+    case "ready": return '<span class="ok">ready</span>';
+    case "loading": return '<span class="warn">loading…</span>';
+    case "downloading": return `<span class="warn">downloading ${esc(hs.file)} (${hb(hs.done)} / ${hb(hs.total)})</span>`;
+    case "error": return `<span class="bad">error: ${esc(hs.message)}</span>`;
+    default: return '<span class="muted">idle</span>';
+  }
+}
+
+function renderMembers() {
+  const tb = $("members").querySelector("tbody");
+  const rows = [];
+  const all = [{ info: S.me, online: true, path: "this node", rtt_ms: null, self: true }].concat(S.peers);
+  for (const p of all) {
+    const n = p.info;
+    if (!n) continue;
+    const isHead = S.head === n.id;
+    const tagOk = n.llama_tag && n.llama_tag === S.llama_tag;
+    let role = isHead ? '<span class="chip ok">head</span>' : (n.worker_only ? '<span class="chip">worker only</span>' : `<span class="chip">${esc(n.role)}</span>`);
+    if (!p.online) role = '<span class="chip muted">offline</span>';
+    const inSplit = S.peers.length && S.head && (isHead || (all.find(x => x.info && x.info.id === S.head)?.info?.split || []).includes(n.id));
+    const conn = p.self ? '<span class="muted">this node</span>' : (p.path === "direct" ? '<span class="ok">direct</span>' : p.path === "relayed" ? '<span class="warn">relayed</span>' : '<span class="muted">—</span>');
+    const gpus = (n.gpus || []).map(g => `${esc(g.description || g.name)} <span class="muted">(${hb(g.free)} free)</span>`).join("<br>") || '<span class="muted">none</span>';
+    let tag = esc(n.llama_tag || "installing…");
+    if (n.llama_tag && !tagOk) tag = `<span class="bad" title="different llama.cpp release: excluded from the model split">${tag} ⚠ excluded</span>`;
+    else if (!n.rpc_ready) tag += ' <span class="muted">(starting)</span>';
+    rows.push(`<tr><td><b>${esc(n.name)}</b> ${inSplit ? '<span class="chip">in split</span>' : ""}<div class="mono muted">${short(n.id)}</div></td>
+      <td>${role}</td><td>${conn}${p.remote_addr ? `<div class="mono muted">${esc(p.remote_addr)}</div>` : ""}</td>
+      <td>${p.rtt_ms != null ? p.rtt_ms.toFixed(1) + " ms" : "—"}</td>
+      <td>${hb(n.memory.free)} / ${hb(n.memory.total)}</td><td>${gpus}</td>
+      <td>${tag}<div class="muted">${esc(n.backend)}</div></td><td>${esc(n.os)}/${esc(n.arch)}</td></tr>`);
+  }
+  tb.innerHTML = rows.join("");
+  const online = all.filter(p => p.online && p.info).length;
+  $("capacity").textContent = `${online} node(s) online · pooled memory for the model ≈ ${hb(S.capacity)} (VRAM where nodes have GPUs, otherwise free RAM)`;
+}
+
+function render() {
+  const g = S.group;
+  $("hdr-group").textContent = g.is_lan ? "LAN group (automatic discovery)" : `Group “${g.name}”` + (g.can_admin ? " · you are admin" : "");
+  const isHead = S.head === S.id;
+  $("hdr-role").textContent = isHead ? "head" : (S.me.role || "idle");
+  $("hdr-model").textContent = S.active_alias ? "model: " + S.active_alias : "";
+
+  $("me").innerHTML = `
+    <div>Name</div><div>${esc(S.me.name)}</div>
+    <div>Node ID</div><div class="mono">${esc(S.id)}</div>
+    <div>llama.cpp</div><div>${esc(S.me.llama_tag || "installing…")} · ${esc(S.me.backend || "?")} ${S.me.rpc_ready ? '<span class="ok">rpc ready</span>' : '<span class="warn">rpc starting</span>'}</div>
+    <div>Memory</div><div>${hb(S.me.memory.free)} free of ${hb(S.me.memory.total)}</div>
+    ${S.llama_error ? `<div>Problem</div><div class="bad">${esc(S.llama_error)}</div>` : ""}`;
+  if (S.invite) { $("invite-box").style.display = "block"; $("invite").textContent = "llmesh join " + S.invite; }
+  else $("invite-box").style.display = "none";
+
+  const headNode = S.head === S.id ? S.me : (S.peers.find(p => p.info && p.info.id === S.head) || {}).info;
+  const cfg = S.config || {};
+  $("head").innerHTML = `
+    <div>Group model</div><div class="mono">${esc(S.effective_model)}</div>
+    <div>Head</div><div>${headNode ? esc(headNode.name) + (S.head === S.id ? " (this node)" : "") : '<span class="muted">none yet</span>'}</div>
+    <div>State</div><div>${headNode ? stateText(headNode.head_state) : '<span class="muted">waiting for a node with llama.cpp ready</span>'}</div>
+    <div>Split</div><div>${headNode ? (1 + (headNode.split || []).length) + " machine(s)" : "—"}</div>
+    <div>Context</div><div>${cfg.ctx_size || "—"} tokens</div>
+    <div>API</div><div class="mono">${location.origin}/v1</div>`;
+  const hs = headNode && headNode.head_state;
+  if (hs && hs.state === "downloading" && hs.total) { $("dlbar").style.display = "block"; $("dlbar").firstElementChild.style.width = (100 * hs.done / hs.total).toFixed(1) + "%"; }
+  else $("dlbar").style.display = "none";
+
+  renderMembers();
+
+  // admin controls
+  $("set-model").disabled = !g.can_admin;
+  $("set-model").title = g.can_admin ? "" : "Only the group admin can set the model";
+  $("mode").disabled = !g.can_admin; $("new-round").disabled = !g.can_admin;
+  if (document.activeElement !== $("mode")) $("mode").value = cfg.selection || "admin";
+  $("pick-note").textContent = g.can_admin ? "" : "Only the admin can set the model directly; you can vote.";
+  const cands = (cfg.poll && cfg.poll.candidates) || [];
+  $("round").innerHTML = `Round <b>${S.round}</b> · ${cfg.selection === "vote" ? "votes decide the model" : '<span class="muted">admin decides (votes are advisory)</span>'}` +
+    (S.my_vote ? `<div class="muted">Your vote: <span class="mono">${esc(S.my_vote)}</span></div>` : "");
+  const counts = new Map(S.tally.map(t => [t.model, t.votes]));
+  for (const c of cands) if (!counts.has(c)) counts.set(c, 0);
+  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  $("tally").querySelector("tbody").innerHTML = rows.length ? rows.map(([m, n]) =>
+    `<tr><td class="mono">${esc(m)}</td><td>${n}</td><td><button data-vote="${esc(m)}" ${S.my_vote === m ? "disabled" : ""}>${S.my_vote === m ? "voted" : "Vote"}</button></td></tr>`).join("")
+    : '<tr><td colspan="3" class="muted">No votes in this round yet. Search a model and vote for it.</td></tr>';
+}
+
+async function refresh() {
+  try { S = await api("status"); render(); }
+  catch (e) { $("hdr-group").textContent = "cannot reach llmesh: " + e.message; }
+  try {
+    const l = await api("logs"); const el = $("logs");
+    const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+    el.textContent = l.lines.join("\n") || "(no output yet: logs appear on the head node)";
+    if (atEnd) el.scrollTop = el.scrollHeight;
+  } catch (e) {}
+}
+
+async function hfSearch() {
+  const q = $("hf-q").value.trim(); if (!q) return;
+  const box = $("hf-results"); box.innerHTML = '<div class="muted">Searching…</div>';
+  try {
+    const res = await api("hf/search?q=" + encodeURIComponent(q));
+    box.innerHTML = res.length ? res.map(m => `<div class="item" data-repo="${esc(m.id)}"><b>${esc(m.id)}</b> <span class="muted">· ${m.downloads.toLocaleString()} downloads</span></div>`).join("") : '<div class="muted">No GGUF models found.</div>';
+  } catch (e) { box.innerHTML = `<div class="bad">${esc(e.message)}</div>`; }
+}
+
+async function hfFiles(repo) {
+  const box = $("hf-results"); box.innerHTML = `<div class="muted">Listing ${esc(repo)}…</div>`;
+  try {
+    const r = await api("hf/files?repo=" + encodeURIComponent(repo));
+    const cls = { "fits": "ok", "tight": "warn", "too big": "bad" };
+    box.innerHTML = `<div class="row" style="justify-content:space-between"><b>${esc(repo)}</b><button id="hf-back">← results</button></div>` +
+      `<table><thead><tr><th>Quant</th><th>Size</th><th>Fits group (${hb(r.capacity)})</th><th>Files</th></tr></thead><tbody>` +
+      r.quants.map(q => `<tr class="pick" data-ref="${esc(q.model_ref)}" style="cursor:pointer"><td class="mono">${esc(q.quant)}</td><td>${hb(q.size)}</td><td class="${cls[q.fit]}">${q.fit}</td><td>${q.files.length > 1 ? q.files.length + " parts" : "1"}</td></tr>`).join("") +
+      "</tbody></table>";
+    $("hf-back").onclick = hfSearch;
+  } catch (e) { box.innerHTML = `<div class="bad">${esc(e.message)}</div>`; }
+}
+
+$("hf-go").onclick = hfSearch;
+$("hf-q").addEventListener("keydown", e => { if (e.key === "Enter") hfSearch(); });
+$("hf-results").addEventListener("click", e => {
+  const item = e.target.closest(".item"); if (item) return hfFiles(item.dataset.repo);
+  const pick = e.target.closest("tr.pick");
+  if (pick) { selectedRef = pick.dataset.ref; $("manual-ref").value = selectedRef; document.querySelectorAll("tr.pick").forEach(r => r.style.background = ""); pick.style.background = "var(--chip)"; }
+});
+$("set-model").onclick = async () => {
+  const m = $("manual-ref").value.trim(); if (!m) return toast("Pick a quantization or type a model reference first", true);
+  try { await api("model", { model: m }); toast("Group model set to " + m); refresh(); } catch (e) { toast(e.message, true); }
+};
+$("vote-manual").onclick = async () => {
+  const m = $("manual-ref").value.trim(); if (!m) return toast("Pick a quantization or type a model reference first", true);
+  try { await api("vote", { model: m }); toast("Voted for " + m); refresh(); } catch (e) { toast(e.message, true); }
+};
+$("tally").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-vote]"); if (!b) return;
+  try { await api("vote", { model: b.dataset.vote }); toast("Voted for " + b.dataset.vote); refresh(); } catch (er) { toast(er.message, true); }
+});
+$("mode").onchange = async () => {
+  try { await api("selection", { mode: $("mode").value }); toast("Selection mode: " + $("mode").value); refresh(); } catch (e) { toast(e.message, true); }
+};
+$("new-round").onclick = async () => {
+  const cands = (S.tally || []).map(t => t.model);
+  try { await api("round", { candidates: cands }); toast("New voting round started"); refresh(); } catch (e) { toast(e.message, true); }
+};
+$("copy-invite").onclick = async () => {
+  try { await navigator.clipboard.writeText($("invite").textContent); toast("Invite copied"); } catch (e) { toast("Copy failed: select the text manually", true); }
+};
+
+// Streaming chat through the same OpenAI endpoint any client would use.
+const history = [];
+async function sendChat() {
+  const input = $("chat-in"); const text = input.value.trim(); if (!text) return;
+  input.value = ""; history.push({ role: "user", content: text });
+  const log = $("chatlog");
+  log.insertAdjacentHTML("beforeend", `<p class="msg"><b>you</b> ${esc(text)}</p>`);
+  const out = document.createElement("p"); out.className = "msg"; out.innerHTML = "<b>model</b> "; const span = document.createElement("span"); out.appendChild(span); log.appendChild(out);
+  log.scrollTop = log.scrollHeight;
+  $("chat-send").disabled = true;
+  let acc = "";
+  try {
+    const r = await fetch("/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "llmesh", messages: history, stream: true }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error((j.error && j.error.message) || "HTTP " + r.status); }
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim(); if (data === "[DONE]") continue;
+        try { const d = JSON.parse(data).choices[0].delta; if (d && d.content) { acc += d.content; span.textContent = acc; log.scrollTop = log.scrollHeight; } } catch (e) {}
+      }
+    }
+    history.push({ role: "assistant", content: acc });
+  } catch (e) { span.innerHTML = `<span class="bad">${esc(e.message)}</span>`; history.pop(); }
+  $("chat-send").disabled = false;
+}
+$("chat-send").onclick = sendChat;
+$("chat-in").addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

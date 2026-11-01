@@ -1,0 +1,76 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    target: x86_64-unknown-linux-gnu,  name: llmesh-linux-x64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, name: llmesh-linux-arm64 }
+          - { os: macos-latest,     target: aarch64-apple-darwin,      name: llmesh-macos-arm64 }
+          - { os: macos-latest,     target: x86_64-apple-darwin,       name: llmesh-macos-x64 }
+          - { os: windows-latest,   target: x86_64-pc-windows-msvc,    name: llmesh-windows-x64 }
+          - { os: windows-11-arm,   target: aarch64-pc-windows-msvc,   name: llmesh-windows-arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Unit tests
+        # cross-compiled x64 macOS binaries can't run on the arm64 runner without Rosetta
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: cargo test --release --locked --target ${{ matrix.target }}
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist/${{ matrix.name }}
+          cp target/${{ matrix.target }}/release/llmesh dist/${{ matrix.name }}/
+          cp README.md dist/${{ matrix.name }}/
+          tar -C dist -czf dist/${{ matrix.name }}.tar.gz ${{ matrix.name }}
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/${{ matrix.name }} | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/llmesh.exe dist/${{ matrix.name }}/
+          Copy-Item README.md dist/${{ matrix.name }}/
+          Compress-Archive -Path dist/${{ matrix.name }}/* -DestinationPath dist/${{ matrix.name }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
