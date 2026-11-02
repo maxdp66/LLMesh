@@ -138,6 +138,9 @@ async fn run(cli: Cli) -> Result<()> {
         None => start(paths, cli.start, false).await,
         Some(Cmd::Start(a)) => start(paths, a, false).await,
         Some(Cmd::Group(GroupCmd::Create { group_name: name, start: a })) => {
+            if let Some(m) = &a.model {
+                models::ModelRef::parse(m)?;
+            }
             let key = paths.node_key()?;
             let secret = GroupSecret::generate();
             let mut cfg = GroupConfig::initial(a.model.as_deref().unwrap_or(DEFAULT_MODEL));
@@ -227,6 +230,9 @@ async fn start(paths: Paths, a: StartArgs, show_invite: bool) -> Result<()> {
         let g = paths.find_group(name).with_context(|| format!("no saved group named {name:?} (see `llmesh groups`)"))?;
         let tag = g.secret().tag_hex();
         paths.set_current_group(if g.is_lan() { None } else { Some(&tag) })?;
+    }
+    if let Some(b) = &a.backend {
+        llama::Backend::parse(b)?;
     }
     let group = paths.active_group()?;
     let key = paths.node_key()?;

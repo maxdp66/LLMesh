@@ -37,7 +37,8 @@ def release_tarball():
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as t:
         d = tarfile.TarInfo(f"llama-{TAG}"); d.type = tarfile.DIRTYPE; d.mode = 0o755; t.addfile(d)
-        for exe, script in (("rpc-server", "fake_rpc_server.py"), ("llama-server", "fake_llama_server.py")):
+        # llama.cpp releases since late 2026 ship the RPC server as `ggml-rpc-server` (older ones: `rpc-server`).
+        for exe, script in (("ggml-rpc-server", "fake_rpc_server.py"), ("llama-server", "fake_llama_server.py")):
             body = f'#!/bin/sh\nexec "{sys.executable}" "{os.path.join(HERE, script)}" "$@"\n'.encode()
             ti = tarfile.TarInfo(f"llama-{TAG}/{exe}"); ti.size = len(body); ti.mode = 0o755
             t.addfile(ti, io.BytesIO(body))

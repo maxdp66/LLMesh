@@ -116,7 +116,7 @@ def chat(port, content="hi", **kw):
 
 def main():
     from openai import OpenAI
-    mock = subprocess.Popen([sys.executable, os.path.join(HERE, "mock_server.py"), str(MOCK_PORT)], stdout=open(os.path.join(WORK, "mock.log"), "w"), stderr=subprocess.STDOUT)
+    mock = subprocess.Popen([sys.executable, os.path.join(HERE, "mock_server.py"), str(MOCK_PORT)], stdout=open(os.path.join(WORK, "mock.log"), "w"), stderr=subprocess.STDOUT, start_new_session=True)
     procs["mock"] = (mock, MOCK_PORT)
     time.sleep(0.7)
     log(f"work dir {WORK}")
